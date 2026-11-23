@@ -1,0 +1,1357 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Senga xat bor</title>
+  <style>
+    * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: #f3e3d3;
+      font-family: Georgia, serif;
+      background: radial-gradient(ellipse at 50% 40%, #3a1f14, #120a06 70%);
+      overflow: hidden;
+    }
+    canvas#bg { position: fixed; inset: 0; z-index: 0; }
+    canvas#trail {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      pointer-events: none;
+    }
+
+    /* ---- Maxsus kursor (faqat sichqonchali qurilmada) ---- */
+    @media (hover: hover) {
+      body, button { cursor: none; }
+      body.museum-active, body.museum-active button { cursor: auto; }
+      body.museum-active .dot, body.museum-active .ring { display: none; }
+
+      .dot, .ring {
+        position: fixed; left: 0; top: 0; z-index: 100;
+        pointer-events: none; border-radius: 50%;
+        will-change: transform;
+      }
+      .dot  { width: 8px;  height: 8px;  background: #ffd27a; margin: -4px 0 0 -4px; }
+      .ring { width: 44px; height: 44px; border: 1.5px solid rgba(255,210,122,.7);
+              margin: -22px 0 0 -22px; transition: width .25s, height .25s, margin .25s, background .25s; }
+      .ring.big { width: 84px; height: 84px; margin: -42px 0 0 -42px; background: rgba(255,92,138,.18); }
+    }
+    @media (hover: none) { .dot, .ring { display: none; } }
+
+    /* ---- Sahifa tuzilishi ---- */
+    main {
+      position: relative; z-index: 1;
+      min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .hidden { display: none !important; }
+
+    /* ---- 1-ekran: katta sarlavha va konvert ---- */
+    .intro { text-align: center; }
+    .title {
+      margin: 0 0 8px;
+      font-size: clamp(3rem, 12vw, 8rem);
+      line-height: 1;
+      letter-spacing: -0.02em;
+      font-weight: 400;
+    }
+    .title span {
+      display: inline-block;
+      opacity: 0;
+      transform: translateY(60%) rotate(8deg);
+      animation: rise 1s cubic-bezier(.2,.9,.2,1) forwards;
+    }
+    @keyframes rise { to { opacity: 1; transform: none; } }
+    .sub { margin: 0 0 36px; opacity: .7; font-size: 1.15rem; }
+
+    .envelope {
+      transition: box-shadow .3s;
+      position: relative; width: 280px; height: 190px;
+      border: 0; border-radius: 8px; background: #c2305a; padding: 0;
+      transform: translate(var(--mx, 0px), var(--my, 0px));
+      box-shadow: 0 0 40px rgba(255, 92, 138, .35);
+    }
+    .envelope:hover { box-shadow: 0 0 70px rgba(255, 92, 138, .65); }
+    .envelope::before {
+      content: ""; position: absolute; inset: 0; border-radius: 8px; background: #9b2347;
+      clip-path: polygon(0 0, 50% 58%, 100% 0, 100% 100%, 0 100%);
+    }
+    .flap {
+      position: absolute; left: 0; right: 0; top: 0; height: 60%;
+      background: #b02a52; clip-path: polygon(0 0, 100% 0, 50% 100%);
+      transform-origin: top; transition: transform .7s;
+    }
+    .seal {
+      position: absolute; left: 50%; top: 50%; font-size: 2.2rem;
+      transform: translate(-50%, -50%); transition: opacity .3s;
+    }
+    .envelope.open .flap { transform: rotateX(180deg); }
+    .envelope.open .seal { opacity: 0; }
+
+    /* ---- 2-ekran: shisha xat ---- */
+    .letter {
+      max-width: 500px; padding: 36px 30px;
+      background: rgba(255, 245, 235, .08);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, .18);
+      border-radius: 18px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, .4);
+    }
+    .letter h2 { margin: 0 0 16px; font-size: 2.2rem; font-weight: 400; color: #ffb3c6; }
+    .line {
+      margin: 0 0 14px; line-height: 1.7;
+      opacity: 0; transform: translateY(10px);
+      transition: opacity .9s, transform .9s;
+    }
+    .line.show { opacity: 1; transform: none; }
+    button.next {
+      display: block; margin: 20px auto 0; padding: 13px 30px;
+      border: 0; border-radius: 999px; background: #ff5c8a; color: #fff; font-size: 1rem;
+    }
+
+    /* ---- Savol ekrani ---- */
+    .ask { text-align: center; max-width: 640px; }
+    .q {
+      margin: 0 0 36px;
+      font-size: clamp(2rem, 7vw, 4rem);
+      line-height: 1.1;
+      font-weight: 400;
+    }
+    .answers {
+      display: flex; gap: 20px;
+      justify-content: center; align-items: center;
+      flex-wrap: wrap;
+      min-height: 110px;
+    }
+    .yes, .no {
+      border: 0; border-radius: 999px;
+      padding: 14px 32px;
+      font-size: 1.1rem;
+      color: #fff;
+    }
+    .yes {
+      background: #ff5c8a;
+      box-shadow: 0 0 30px rgba(255, 92, 138, .5);
+      transition: transform .35s cubic-bezier(.2,.9,.2,1);
+    }
+    .no {
+      background: rgba(255, 255, 255, .12);
+      border: 1px solid rgba(255, 255, 255, .25);
+    }
+    .no.fly {
+      position: fixed;
+      z-index: 60;
+      transition: left .35s cubic-bezier(.2,.9,.2,1), top .35s cubic-bezier(.2,.9,.2,1);
+    }
+    .hint { min-height: 1.5em; margin: 16px 0 0; opacity: .7; }
+
+    /* ---- Bosqichli savollar ---- */
+    .step { display: none; }
+    .step.on { display: block; animation: fadeIn .6s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+    .chip {
+      padding: 12px 22px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, .25);
+      background: rgba(255, 255, 255, .1);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      color: #fff;
+      font-size: 1.05rem;
+      transition: background .25s, transform .25s;
+    }
+    .chip:hover { background: rgba(255, 92, 138, .35); transform: translateY(-3px); }
+    .chip.on { background: #ff5c8a; border-color: #ff5c8a; }
+
+    input[type="time"] {
+      display: block;
+      margin: 24px auto 0;
+      padding: 10px 18px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, .25);
+      background: rgba(255, 255, 255, .1);
+      color: #fff;
+      font-size: 1.1rem;
+      font-family: inherit;
+    }
+    .main {
+      display: block;
+      margin: 24px auto 0;
+      padding: 14px 34px;
+      border: 0;
+      border-radius: 999px;
+      background: #ff5c8a;
+      color: #fff;
+      font-size: 1.1rem;
+      box-shadow: 0 0 30px rgba(255, 92, 138, .5);
+    }
+    .museum-btn {
+      background: linear-gradient(135deg, #d4af37, #aa7c11);
+      box-shadow: 0 0 30px rgba(212, 175, 55, .45);
+      margin-top: 16px;
+    }
+    .summary { white-space: pre-line; line-height: 1.8; font-size: 1.15rem; opacity: .9; margin: 0 0 20px; }
+
+    /* =======================================================
+       3D VIRTUAL MUZEY (GALEREYA) USLUBLARI
+    ======================================================= */
+    #museum-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      background: #0d0806;
+    }
+    canvas#museum-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    .museum-ui {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 20px;
+    }
+    .museum-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    .museum-badge {
+      background: rgba(20, 12, 8, 0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(212, 175, 55, 0.4);
+      padding: 10px 18px;
+      border-radius: 999px;
+      font-size: 0.95rem;
+      color: #ffd27a;
+    }
+    .museum-close {
+      pointer-events: auto;
+      background: rgba(255, 92, 138, 0.85);
+      border: none;
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 999px;
+      font-size: 0.95rem;
+      font-family: inherit;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    /* Rasmga yaqinlashganda chiqadigan izoh kartasi */
+    .art-caption {
+      align-self: center;
+      max-width: 480px;
+      width: 100%;
+      background: rgba(24, 14, 10, 0.82);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(212, 175, 55, 0.5);
+      border-radius: 16px;
+      padding: 18px 24px;
+      text-align: center;
+      transform: translateY(30px);
+      opacity: 0;
+      transition: opacity 0.4s ease, transform 0.4s ease;
+      margin-bottom: 10px;
+    }
+    .art-caption.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .art-caption h3 {
+      margin: 0 0 6px;
+      color: #ffd27a;
+      font-size: 1.3rem;
+      font-weight: 400;
+    }
+    .art-caption p {
+      margin: 0;
+      font-size: 0.98rem;
+      line-height: 1.5;
+      color: #f3e3d3;
+      opacity: 0.9;
+    }
+
+    /* Telefonlar uchun virtual joystik */
+    .touch-controls {
+      display: none;
+      pointer-events: auto;
+      justify-content: space-between;
+      align-items: flex-end;
+      padding-bottom: 10px;
+    }
+    @media (pointer: coarse) {
+      .touch-controls { display: flex; }
+      .desktop-hint { display: none; }
+    }
+    .joystick-zone {
+      width: 110px;
+      height: 110px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(212, 175, 55, 0.4);
+      position: relative;
+      touch-action: none;
+    }
+    .joystick-knob {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: rgba(212, 175, 55, 0.8);
+      position: absolute;
+      top: 33px;
+      left: 33px;
+      box-shadow: 0 0 15px rgba(212, 175, 55, 0.6);
+    }
+    .look-hint {
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 0.85rem;
+      padding: 8px 14px;
+      background: rgba(0,0,0,0.4);
+      border-radius: 999px;
+    }
+  </style>
+</head>
+<body>
+  <div class="dot" id="dot"></div>
+  <div class="ring" id="ring"></div>
+  <canvas id="bg"></canvas>
+  <canvas id="trail"></canvas>
+
+  <main id="main-ui">
+    <div class="intro" id="intro">
+      <h1 class="title" id="title">Qomarii</h1>
+      <p class="sub">Senga bitta xat bor…</p>
+      <button class="envelope" id="envelope" aria-label="Xatni ochish">
+        <span class="flap"></span>
+        <span class="seal">💌</span>
+      </button>
+    </div>
+
+    <article class="letter hidden" id="letter">
+      <h2>Salom, Qomarii</h2>
+      <p class="line">Bilasanmi, sen bilan o‘tgan har bir kun menga kichik bayramdek tuyuladi.</p>
+      <p class="line">Kulishing, gapirishing, hatto jahling chiqqanda ham — hammasi menga yoqadi.</p>
+      <p class="line">Shuning uchun bitta narsani aytmoqchiman…</p>
+      <button class="next line" id="toAsk">Davom etish 💌</button>
+    </article>
+
+    <!-- Savol ekrani -->
+    <section class="ask hidden" id="ask">
+      <h2 class="q">Men bilan uchrashuvga chiqasanmi? 🌹</h2>
+      <div class="answers">
+        <button class="yes" id="yes">Ha, albatta 💖</button>
+        <button class="no" id="no">Yo‘q</button>
+      </div>
+      <p class="hint" id="hint"></p>
+    </section>
+
+    <!-- "Ha" dan keyingi savollar -->
+    <section class="ask hidden" id="done">
+      <div class="step on" data-step="1">
+        <h2 class="q">Ura! Kelishdik 🎉<br>Qayerga boramiz?</h2>
+        <div class="chips" data-key="where" data-next="2">
+          <button class="chip" data-v="Kafe">☕ Kafe</button>
+          <button class="chip" data-v="Park">🌳 Park</button>
+          <button class="chip" data-v="Kino">🎬 Kino</button>
+          <button class="chip" data-v="Restoran">🍽 Restoran</button>
+          <button class="chip" data-v="Sen tanla">✨ Sen tanla</button>
+        </div>
+      </div>
+
+      <div class="step" data-step="2">
+        <h2 class="q">Qachon?</h2>
+        <div class="chips" data-key="when">
+          <button class="chip" data-v="Bugun">Bugun</button>
+          <button class="chip" data-v="Ertaga">Ertaga</button>
+          <button class="chip" data-v="Dam olish kuni">Dam olish kuni</button>
+        </div>
+        <input type="time" id="time" value="18:00" aria-label="Vaqt">
+        <button class="main" id="whenNext">Davom etish</button>
+      </div>
+
+      <div class="step" data-step="3">
+        <h2 class="q">Qaysi gulni yoqtirasan?</h2>
+        <div class="chips" data-key="flower" data-next="4">
+          <button class="chip" data-v="Atirgul">🌹 Atirgul</button>
+          <button class="chip" data-v="Lola">🌷 Lola</button>
+          <button class="chip" data-v="Romashka">🌼 Romashka</button>
+          <button class="chip" data-v="Gul shart emas">🙅 Gul shart emas</button>
+        </div>
+      </div>
+
+      <div class="step" data-step="4">
+        <h2 class="q">Hammasi tayyor 💌</h2>
+        <p class="summary" id="summary"></p>
+        <button class="main" id="send">Javobni yuborish</button>
+        <button class="main museum-btn" id="openMuseum">🖼 Bizning 3D Muzeyga kirish</button>
+        <p class="hint" id="sendMsg"></p>
+      </div>
+    </section>
+  </main>
+
+  <!-- =======================================================
+       3D VIRTUAL MUZEY EKRANI
+  ======================================================= -->
+  <div id="museum-screen" class="hidden">
+    <canvas id="museum-canvas"></canvas>
+    <div class="museum-ui">
+      <div class="museum-top">
+        <div class="museum-badge">
+          🏛 Xotiralar Galereyasi <span class="desktop-hint">| Yurish: W A S D • Qarash: Sichqonchani suring</span>
+        </div>
+        <button class="museum-close" id="closeMuseum">✕ Chiqish</button>
+      </div>
+
+      <div class="art-caption" id="artCaption">
+        <h3 id="artTitle">Sarlavha</h3>
+        <p id="artDesc">Tavsif</p>
+      </div>
+
+      <div class="touch-controls">
+        <div class="joystick-zone" id="joyZone">
+          <div class="joystick-knob" id="joyKnob"></div>
+        </div>
+        <div class="look-hint">Atrofga qarash uchun ekranni suring 👆</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    /* =====================================================================
+       SOZLAMALAR: O'zingizning rasmlaringizni shu yerga qo'shing!
+       img: rasm manzili (URL yoki papkadagi fayl nomi, masalan: 'rasm1.jpg')
+    ===================================================================== */
+    const GALLERY_ITEMS = [
+      {
+        img: 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?auto=format&fit=crop&w=800&q=80',
+        title: 'Birinchi uchrashuv ✨',
+        desc: 'O‘sha kungi tabassuming hali ham ko‘z o‘ngimda.'
+      },
+      {
+        img: 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?auto=format&fit=crop&w=800&q=80',
+        title: 'Eng samimiy kulgu 💖',
+        desc: 'Sen kulganingda butun dunyo yorishib ketgandek bo‘ladi.'
+      },
+      {
+        img: 'https://images.unsplash.com/photo-1529333166437-7750a6dd5a70?auto=format&fit=crop&w=800&q=80',
+        title: 'Birgalikdagi sayr 🌆',
+        desc: 'Vaqt qanday o‘tib ketganini umuman sezmay qolganmiz.'
+      },
+      {
+        img: 'https://images.unsplash.com/photo-1523438885200-e635ba2c371e?auto=format&fit=crop&w=800&q=80',
+        title: 'Unutilmas lahza 🌹',
+        desc: 'Har bir daqiqasi xotiramda abadiy muhrlanib qolgan.'
+      },
+      {
+        img: 'https://images.unsplash.com/photo-1494774157365-9e04c6720e47?auto=format&fit=crop&w=800&q=80',
+        title: 'Kelajakdagi orzularimiz 🕊',
+        desc: 'Bu muzeyning eng chiroyli suratlari hali oldinda...'
+      },
+      {
+        img: 'https://images.unsplash.com/photo-1518568814500-bf0f8d125f46?auto=format&fit=crop&w=800&q=80',
+        title: 'Sen va Men ❤️',
+        desc: 'Mening eng sevimli san’at asarim — bu sensan.'
+      }
+    ];
+
+    /* ========== 1. Sarlavhani harflarga bo'lish ========== */
+    const title = document.getElementById('title');
+    const word = title.textContent;
+    title.textContent = '';
+    word.split('').forEach(function (ch, i) {
+      const s = document.createElement('span');
+      s.textContent = ch;
+      s.style.animationDelay = (0.2 + i * 0.08) + 's';
+      title.appendChild(s);
+    });
+
+    /* ========== 2. Asosiy fon sahnasi (Yurak zarrachalari) ========== */
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 100);
+    camera.position.z = 12;
+    const renderer = new THREE.WebGLRenderer({
+      canvas: document.getElementById('bg'), alpha: true, antialias: true
+    });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+
+    const HEART = 9000, DUST = 2500, COUNT = HEART + DUST;
+    const pos = new Float32Array(COUNT * 3);
+    const seed = new Float32Array(COUNT);
+
+    for (let i = 0; i < HEART; i++) {
+      const t = Math.random() * Math.PI * 2;
+      const hx = 16 * Math.pow(Math.sin(t), 3);
+      const hy = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+      const k = Math.sqrt(Math.random());
+      pos[i * 3]     = hx * 0.2 * k;
+      pos[i * 3 + 1] = hy * 0.2 * k + 0.3;
+      pos[i * 3 + 2] = (Math.random() - 0.5) * 2.2;
+      seed[i] = Math.random();
+    }
+    for (let i = HEART; i < COUNT; i++) {
+      pos[i * 3]     = (Math.random() - 0.5) * 30;
+      pos[i * 3 + 1] = (Math.random() - 0.5) * 20;
+      pos[i * 3 + 2] = (Math.random() - 0.5) * 14;
+      seed[i] = Math.random();
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
+
+    const uniforms = {
+      uTime:  { value: 0 },
+      uMouse: { value: new THREE.Vector3(99, 99, 0) },
+      uPulse: { value: 1 },
+      uPx:    { value: renderer.getPixelRatio() },
+      uA:     { value: new THREE.Color(0xff5c8a) },
+      uB:     { value: new THREE.Color(0xffd27a) }
+    };
+
+    const material = new THREE.ShaderMaterial({
+      uniforms: uniforms,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      vertexShader: `
+        uniform float uTime, uPulse, uPx;
+        uniform vec3 uMouse;
+        attribute float aSeed;
+        varying float vMix;
+        void main() {
+          vec3 p = position;
+          p.x += sin(uTime * 0.5 + p.y * 1.5 + aSeed * 6.28) * 0.12;
+          p.y += cos(uTime * 0.4 + p.x * 1.5 + aSeed * 6.28) * 0.12;
+          p.z += sin(uTime * 0.6 + aSeed * 20.0) * 0.2;
+
+          vec2 d = p.xy - uMouse.xy;
+          float dist = length(d);
+          float f = smoothstep(2.4, 0.0, dist);
+          p.xy += normalize(d + 0.0001) * f * 1.5;
+          p.z  += f * 1.5;
+
+          float ringR = uPulse * 12.0;
+          float ring = exp(-pow(dist - ringR, 2.0) * 0.7) * (1.0 - uPulse);
+          p.xy += normalize(d + 0.0001) * ring * 1.8;
+          p.z  += ring * 2.5;
+
+          vMix = clamp(f + ring, 0.0, 1.0);
+          vec4 mv = modelViewMatrix * vec4(p, 1.0);
+          gl_PointSize = (2.0 + aSeed * 3.0 + vMix * 6.0) * uPx * (12.0 / -mv.z);
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: `
+        uniform vec3 uA, uB;
+        varying float vMix;
+        void main() {
+          float d = length(gl_PointCoord - 0.5);
+          if (d > 0.5) discard;
+          float a = smoothstep(0.5, 0.0, d);
+          gl_FragColor = vec4(mix(uA, uB, vMix), a * 0.9);
+        }`
+    });
+
+    const points = new THREE.Points(geo, material);
+    scene.add(points);
+
+    /* ========== 4. Kursor va magnit ========== */
+    const mouse = { x: 0, y: 0 };
+    const smooth = { x: 0, y: 0 };
+    const cur = { x: innerWidth / 2, y: innerHeight / 2 };
+    const ringCur = { x: cur.x, y: cur.y };
+    let pulseStart = -10;
+    let isMuseumOpen = false;
+
+    window.addEventListener('pointermove', function (e) {
+      if (isMuseumOpen) return;
+      mouse.x = (e.clientX / innerWidth) * 2 - 1;
+      mouse.y = -((e.clientY / innerHeight) * 2 - 1);
+      cur.x = e.clientX; cur.y = e.clientY;
+    });
+    window.addEventListener('pointerdown', function () {
+      if (isMuseumOpen) return;
+      pulseStart = clock.getElapsedTime();
+    });
+
+    const dot = document.getElementById('dot');
+    const ring = document.getElementById('ring');
+    document.querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('pointerenter', function () { ring.classList.add('big'); });
+      b.addEventListener('pointerleave', function () { ring.classList.remove('big'); });
+    });
+
+    const envelope = document.getElementById('envelope');
+    const magnet = { x: 0, y: 0, tx: 0, ty: 0 };
+
+    window.addEventListener('pointermove', function (e) {
+      if (isMuseumOpen) return;
+      const r = envelope.getBoundingClientRect();
+      const dx = e.clientX - (r.left + r.width / 2);
+      const dy = e.clientY - (r.top + r.height / 2);
+      const near = Math.hypot(dx, dy) < 260;
+      magnet.tx = near ? dx * 0.12 : 0;
+      magnet.ty = near ? dy * 0.12 : 0;
+    });
+
+    /* ========== 5. Asosiy animatsiya sikli ========== */
+    const clock = new THREE.Clock();
+    function damp(k, dt) { return 1 - Math.exp(-k * dt); }
+
+    let lastNow = performance.now();
+    const dotPos = { x: cur.x, y: cur.y };
+    const vel = { x: 0, y: 0 };
+
+    function animate() {
+      requestAnimationFrame(animate);
+      if (isMuseumOpen) return;
+
+      const now = performance.now();
+      const dt = Math.min((now - lastNow) / 1000, 0.05);
+      lastNow = now;
+      const t = clock.getElapsedTime();
+
+      smooth.x += (mouse.x - smooth.x) * damp(3.5, dt);
+      smooth.y += (mouse.y - smooth.y) * damp(3.5, dt);
+
+      const halfH = Math.tan((camera.fov * Math.PI) / 360) * camera.position.z;
+      uniforms.uMouse.value.set(smooth.x * halfH * camera.aspect, smooth.y * halfH, 0);
+
+      uniforms.uTime.value = t;
+      uniforms.uPulse.value = Math.min((t - pulseStart) / 1.6, 1);
+
+      points.rotation.y = smooth.x * 0.35 + Math.sin(t * 0.3) * 0.15;
+      points.rotation.x = -smooth.y * 0.2;
+      camera.position.x = smooth.x * 0.8;
+      camera.position.y = smooth.y * 0.5;
+      camera.lookAt(0, 0, 0);
+
+      const px = dotPos.x, py = dotPos.y;
+      dotPos.x += (cur.x - dotPos.x) * damp(30, dt);
+      dotPos.y += (cur.y - dotPos.y) * damp(30, dt);
+
+      const kv = damp(12, dt);
+      vel.x += ((dotPos.x - px) / Math.max(dt, 0.001) - vel.x) * kv;
+      vel.y += ((dotPos.y - py) / Math.max(dt, 0.001) - vel.y) * kv;
+
+      ringCur.x += (dotPos.x - ringCur.x) * damp(8, dt);
+      ringCur.y += (dotPos.y - ringCur.y) * damp(8, dt);
+
+      const speed = Math.hypot(vel.x, vel.y);
+      const stretch = 1 + Math.min(speed / 4000, 0.3);
+      dot.style.transform  = 'translate3d(' + dotPos.x + 'px,' + dotPos.y + 'px,0)';
+      ring.style.transform = 'translate3d(' + ringCur.x + 'px,' + ringCur.y + 'px,0) scale(' + stretch + ')';
+
+      magnet.x += (magnet.tx - magnet.x) * damp(10, dt);
+      magnet.y += (magnet.ty - magnet.y) * damp(10, dt);
+      envelope.style.setProperty('--mx', magnet.x + 'px');
+      envelope.style.setProperty('--my', magnet.y + 'px');
+
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', function () {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+
+    /* ========== 6. Konvertni ochish ========== */
+    const intro = document.getElementById('intro');
+    const letter = document.getElementById('letter');
+    envelope.addEventListener('click', function () {
+      envelope.classList.add('open');
+      setTimeout(function () {
+        intro.classList.add('hidden');
+        letter.classList.remove('hidden');
+        document.querySelectorAll('.line').forEach(function (line, i) {
+          setTimeout(function () { line.classList.add('show'); }, 300 + i * 1400);
+        });
+      }, 800);
+    });
+
+    /* ========== 7. Yulduzchalar izi ========== */
+    const trCanvas = document.getElementById('trail');
+    const tc = trCanvas.getContext('2d');
+
+    function trResize() {
+      const r = Math.min(devicePixelRatio, 2);
+      trCanvas.width = innerWidth * r;
+      trCanvas.height = innerHeight * r;
+      tc.setTransform(r, 0, 0, r, 0, 0);
+    }
+    trResize();
+    window.addEventListener('resize', trResize);
+
+    const stars = [];
+    const trailPrev = { x: dotPos.x, y: dotPos.y };
+    function rand(a, b) { return a + Math.random() * (b - a); }
+
+    function spawnStar(x, y, vx, vy) {
+      if (stars.length > 300 || isMuseumOpen) return;
+      stars.push({
+        x: x + rand(-5, 5), y: y + rand(-5, 5),
+        vx: vx + rand(-0.4, 0.4), vy: vy + rand(-0.7, 0.1),
+        size: rand(3, 9), rot: rand(0, Math.PI), spin: rand(-0.04, 0.04),
+        phase: rand(0, 6.28), life: 1, decay: rand(0.008, 0.02)
+      });
+    }
+
+    window.addEventListener('pointerdown', function (e) {
+      if (isMuseumOpen) return;
+      for (let i = 0; i < 22; i++) {
+        const a = (i / 22) * Math.PI * 2;
+        const sp = rand(1.5, 4);
+        spawnStar(e.clientX, e.clientY, Math.cos(a) * sp, Math.sin(a) * sp);
+      }
+    });
+
+    function drawStar(x, y, r, rot) {
+      tc.beginPath();
+      for (let k = 0; k < 8; k++) {
+        const a = rot + (k * Math.PI) / 4;
+        const rr = k % 2 === 0 ? r : r * 0.28;
+        const px = x + Math.cos(a) * rr;
+        const py = y + Math.sin(a) * rr;
+        if (k === 0) tc.moveTo(px, py); else tc.lineTo(px, py);
+      }
+      tc.closePath();
+      tc.fill();
+    }
+
+    function trLoop(time) {
+      requestAnimationFrame(trLoop);
+      if (isMuseumOpen) return;
+      const t = time / 1000;
+
+      const dx = dotPos.x - trailPrev.x;
+      const dy = dotPos.y - trailPrev.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 9) {
+        const steps = Math.min(8, Math.floor(dist / 9));
+        for (let i = 1; i <= steps; i++) {
+          const f = i / steps;
+          spawnStar(trailPrev.x + dx * f, trailPrev.y + dy * f, vel.x * 0.0006, vel.y * 0.0006);
+        }
+        trailPrev.x = dotPos.x;
+        trailPrev.y = dotPos.y;
+      }
+
+      tc.clearRect(0, 0, innerWidth, innerHeight);
+      tc.globalCompositeOperation = 'lighter';
+      tc.shadowColor = 'rgba(255,255,255,0.9)';
+      tc.shadowBlur = 12;
+
+      for (let i = stars.length - 1; i >= 0; i--) {
+        const s = stars[i];
+        s.x += s.vx + Math.sin(t * 3 + s.phase) * 0.3;
+        s.y += s.vy;
+        s.vy -= 0.003;
+        s.vx *= 0.985;
+        s.rot += s.spin;
+        s.life -= s.decay;
+        if (s.life <= 0) { stars.splice(i, 1); continue; }
+
+        const twinkle = 0.65 + 0.35 * Math.sin(t * 10 + s.phase);
+        tc.globalAlpha = s.life * twinkle;
+        tc.fillStyle = '#ffffff';
+        drawStar(s.x, s.y, s.size * (0.4 + s.life * 0.6), s.rot);
+      }
+      tc.globalAlpha = 1;
+    }
+    requestAnimationFrame(trLoop);
+
+    /* ========== 8. Savol ekrani ========== */
+    const ask  = document.getElementById('ask');
+    const done = document.getElementById('done');
+    const yes  = document.getElementById('yes');
+    const no   = document.getElementById('no');
+    const hint = document.getElementById('hint');
+
+    document.getElementById('toAsk').addEventListener('click', function () {
+      letter.classList.add('hidden');
+      ask.classList.remove('hidden');
+    });
+
+    const labels = ['Yo‘q', 'Aniqmi?', 'Rostdanmi?', 'Yana o‘yla', 'Mayli, yo‘q', 'Hali ham yo‘q?'];
+    const hints  = [
+      '',
+      'Ushlab ko‘r-chi 😏',
+      'Hmm, qo‘lga tushmayapti…',
+      'Yaxshilab o‘yla 🥺',
+      'Iltimos-ku…',
+      'Bu tugma buzilgan shekilli 🙈',
+      'Baribir “Ha” bosasan 😌'
+    ];
+    let tries = 0;
+
+    function dodge() {
+      const r = no.getBoundingClientRect();
+      if (!no.classList.contains('fly')) {
+        no.style.left = r.left + 'px';
+        no.style.top  = r.top + 'px';
+        no.classList.add('fly');
+        no.getBoundingClientRect();
+      }
+      tries++;
+      const m = 16;
+      const maxX = innerWidth  - r.width  - m;
+      const maxY = innerHeight - r.height - m;
+      let x, y, n = 0;
+      do {
+        x = m + Math.random() * (maxX - m);
+        y = m + Math.random() * (maxY - m);
+        n++;
+      } while (n < 20 && Math.hypot(x - r.left, y - r.top) < 160);
+
+      no.style.left = x + 'px';
+      no.style.top  = y + 'px';
+      no.textContent = labels[Math.min(tries, labels.length - 1)];
+      hint.textContent = hints[Math.min(tries, hints.length - 1)];
+      const scale = Math.min(1 + tries * 0.12, 2);
+      yes.style.transform = 'scale(' + scale + ')';
+    }
+
+    let lastDodge = 0;
+    window.addEventListener('pointermove', function (e) {
+      if (ask.classList.contains('hidden') || e.pointerType === 'touch' || isMuseumOpen) return;
+      const now = Date.now();
+      if (now - lastDodge < 150) return;
+      const r = no.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      if (Math.hypot(e.clientX - cx, e.clientY - cy) < 100) {
+        lastDodge = now;
+        dodge();
+      }
+    });
+
+    no.addEventListener('touchstart', function (e) { e.preventDefault(); dodge(); }, { passive: false });
+    no.addEventListener('click', dodge);
+
+    yes.addEventListener('click', function () {
+      ask.classList.add('hidden');
+      done.classList.remove('hidden');
+      pulseStart = clock.getElapsedTime();
+      const cx = innerWidth / 2, cy = innerHeight / 2;
+      for (let i = 0; i < 90; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = rand(1.5, 7);
+        spawnStar(cx, cy, Math.cos(a) * sp, Math.sin(a) * sp);
+      }
+    });
+
+    /* ========== 9. Bosqichli savollar va Telegram ========== */
+    const TELEGRAM = 'ramazon702';
+    const pick = { where: '', when: '', flower: '' };
+
+    function goStep(n) {
+      document.querySelectorAll('.step').forEach(function (s) {
+        s.classList.toggle('on', Number(s.dataset.step) === n);
+      });
+      if (n === 4) showSummary();
+    }
+
+    document.querySelectorAll('.chips').forEach(function (group) {
+      group.querySelectorAll('.chip').forEach(function (chip) {
+        chip.addEventListener('click', function () {
+          group.querySelectorAll('.chip').forEach(function (c) { c.classList.remove('on'); });
+          chip.classList.add('on');
+          pick[group.dataset.key] = chip.dataset.v;
+
+          const r = chip.getBoundingClientRect();
+          for (let i = 0; i < 14; i++) {
+            const a = Math.random() * Math.PI * 2, sp = rand(1, 3.5);
+            spawnStar(r.left + r.width / 2, r.top + r.height / 2, Math.cos(a) * sp, Math.sin(a) * sp);
+          }
+          if (group.dataset.next) {
+            setTimeout(function () { goStep(Number(group.dataset.next)); }, 450);
+          }
+        });
+      });
+    });
+
+    document.getElementById('whenNext').addEventListener('click', function () { goStep(3); });
+
+    function buildText() {
+      const time = document.getElementById('time').value;
+      return 'Ha! 💖 Men uchrashuvga roziman.\n' +
+             'Qayerda: ' + (pick.where  || 'sen tanla') + '\n' +
+             'Qachon: '  + (pick.when   || 'o‘zing ayt') + ', soat ' + time + '\n' +
+             'Gul: '     + (pick.flower || 'o‘zing bilasan');
+    }
+
+    function showSummary() {
+      document.getElementById('summary').textContent = buildText();
+    }
+
+    const WEB3FORMS_KEY = '3feace75-1200-4f95-b004-ebbbbd02e996';
+
+    function celebrate() {
+      pulseStart = clock.getElapsedTime();
+      for (let i = 0; i < 70; i++) {
+        const a = Math.random() * Math.PI * 2, sp = rand(1.5, 6);
+        spawnStar(innerWidth / 2, innerHeight / 2, Math.cos(a) * sp, Math.sin(a) * sp);
+      }
+    }
+
+    document.getElementById('send').addEventListener('click', async function () {
+      const btn = this;
+      const msg = document.getElementById('sendMsg');
+      btn.disabled = true;
+      msg.textContent = 'Yuborilmoqda…';
+
+      try {
+        const res = await fetch('https://api.web3forms.com/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({
+            access_key: WEB3FORMS_KEY,
+            subject: 'Qomarii javob berdi 💖',
+            from_name: 'Sevgi xati',
+            message: buildText()
+          })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || 'xato');
+
+        msg.textContent = 'Javobing yuborildi 💖';
+        celebrate();
+      } catch (err) {
+        const url = 'https://t.me/' + TELEGRAM + '?text=' + encodeURIComponent(buildText());
+        msg.innerHTML = 'Yuborib bo‘lmadi. <a href="' + url + '" target="_blank" style="color:#ffb3c6">Telegram orqali yubor 💌</a>';
+        btn.disabled = false;
+      }
+    });
+
+    /* =====================================================================
+       10. REALISTIK 3D MUZEY (GALEREYA) MANTIQI
+    ===================================================================== */
+    const museumScreen = document.getElementById('museum-screen');
+    const museumCanvas = document.getElementById('museum-canvas');
+    const artCaption   = document.getElementById('artCaption');
+    const artTitle     = document.getElementById('artTitle');
+    const artDesc      = document.getElementById('artDesc');
+
+    let mScene, mCamera, mRenderer, mInitialized = false;
+    const artworks = []; // Har bir rasmning 3D koordinatasi va matni
+
+    // Protsedural marmar/parket teksturasi yaratish (tashqi rasm yuklamasdan realistik ko'rinish)
+    function createFloorTexture() {
+      const c = document.createElement('canvas');
+      c.width = 512; c.height = 512;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#24140e';
+      ctx.fillRect(0, 0, 512, 512);
+
+      // Plitka chiziqlari va marmar tolalari
+      ctx.strokeStyle = 'rgba(212, 175, 55, 0.15)';
+      ctx.lineWidth = 2;
+      for (let i = 0; i <= 512; i += 128) {
+        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 512); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(512, i); ctx.stroke();
+      }
+      for (let i = 0; i < 40; i++) {
+        ctx.strokeStyle = 'rgba(255, 230, 200, 0.04)';
+        ctx.lineWidth = Math.random() * 4 + 1;
+        ctx.beginPath();
+        ctx.moveTo(Math.random() * 512, 0);
+        ctx.bezierCurveTo(Math.random()*512, 170, Math.random()*512, 340, Math.random()*512, 512);
+        ctx.stroke();
+      }
+      const tex = new THREE.CanvasTexture(c);
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(6, 16);
+      return tex;
+    }
+
+    // Devor teksturasi (baxmal/gips uslubi)
+    function createWallTexture() {
+      const c = document.createElement('canvas');
+      c.width = 256; c.height = 256;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#2d1812';
+      ctx.fillRect(0, 0, 256, 256);
+      for (let i = 0; i < 1500; i++) {
+        ctx.fillStyle = Math.random() > 0.5 ? 'rgba(255,255,255,0.015)' : 'rgba(0,0,0,0.08)';
+        ctx.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
+      }
+      const tex = new THREE.CanvasTexture(c);
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(4, 2);
+      return tex;
+    }
+
+    function initMuseum() {
+      if (mInitialized) return;
+      mInitialized = true;
+
+      mScene = new THREE.Scene();
+      mScene.background = new THREE.Color(0x120906);
+      mScene.fog = new THREE.FogExp2(0x120906, 0.032); // Uzoqni yumshoq tuman qoplaydi
+
+      mCamera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.1, 60);
+      mCamera.position.set(0, 1.7, 6); // Odam bo'yi balandligi (1.7m)
+
+      mRenderer = new THREE.WebGLRenderer({ canvas: museumCanvas, antialias: true });
+      mRenderer.setSize(innerWidth, innerHeight);
+      mRenderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+      mRenderer.shadowMap.enabled = true;
+      mRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      mRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+      mRenderer.toneMappingExposure = 1.15;
+
+      // Muzey o'lchamlari (rasmlar soniga qarab zal uzunligi avtomatik moslashadi)
+      const pairsCount = Math.ceil(GALLERY_ITEMS.length / 2);
+      const spacing = 6.5;
+      const hallLength = Math.max(16, pairsCount * spacing + 8);
+      const hallWidth = 9.5;
+      const hallHeight = 4.8;
+      const zStart = 8;
+      const zEnd = zStart - hallLength;
+
+      // Umumiy yumshoq yorug'lik
+      const ambient = new THREE.AmbientLight(0xffead8, 0.45);
+      mScene.add(ambient);
+
+      // Pol (Yaltiroq marmar effekti)
+      const floorMat = new THREE.MeshStandardMaterial({
+        map: createFloorTexture(),
+        roughness: 0.22,
+        metalness: 0.15
+      });
+      const floor = new THREE.Mesh(new THREE.PlaneGeometry(hallWidth, hallLength), floorMat);
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.set(0, 0, zStart - hallLength / 2);
+      floor.receiveShadow = true;
+      mScene.add(floor);
+
+      // Qizil baxmal gilam yo'lakchasi (o'rtada)
+      const carpetMat = new THREE.MeshStandardMaterial({ color: 0x6b1426, roughness: 0.85 });
+      const carpet = new THREE.Mesh(new THREE.PlaneGeometry(2.2, hallLength - 2), carpetMat);
+      carpet.rotation.x = -Math.PI / 2;
+      carpet.position.set(0, 0.005, zStart - hallLength / 2);
+      carpet.receiveShadow = true;
+      mScene.add(carpet);
+
+      // Shift
+      const ceilMat = new THREE.MeshStandardMaterial({ color: 0x1a0e0a, roughness: 0.9 });
+      const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(hallWidth, hallLength), ceilMat);
+      ceiling.rotation.x = Math.PI / 2;
+      ceiling.position.set(0, hallHeight, zStart - hallLength / 2);
+      mScene.add(ceiling);
+
+      // Devorlar materiali
+      const wallMat = new THREE.MeshStandardMaterial({
+        map: createWallTexture(),
+        roughness: 0.75
+      });
+
+      // Chap va o'ng devorlar
+      const sideGeo = new THREE.PlaneGeometry(hallLength, hallHeight);
+      const leftWall = new THREE.Mesh(sideGeo, wallMat);
+      leftWall.rotation.y = Math.PI / 2;
+      leftWall.position.set(-hallWidth / 2, hallHeight / 2, zStart - hallLength / 2);
+      leftWall.receiveShadow = true;
+      mScene.add(leftWall);
+
+      const rightWall = new THREE.Mesh(sideGeo, wallMat);
+      rightWall.rotation.y = -Math.PI / 2;
+      rightWall.position.set(hallWidth / 2, hallHeight / 2, zStart - hallLength / 2);
+      rightWall.receiveShadow = true;
+      mScene.add(rightWall);
+
+      // Old va orqa devorlar
+      const endGeo = new THREE.PlaneGeometry(hallWidth, hallHeight);
+      const backWall = new THREE.Mesh(endGeo, wallMat);
+      backWall.position.set(0, hallHeight / 2, zEnd);
+      mScene.add(backWall);
+
+      const frontWall = new THREE.Mesh(endGeo, wallMat);
+      frontWall.rotation.y = Math.PI;
+      frontWall.position.set(0, hallHeight / 2, zStart);
+      mScene.add(frontWall);
+
+      // To'r devordagi romantik yozuv (Canvas orqali)
+      const signCanvas = document.createElement('canvas');
+      signCanvas.width = 1024; signCanvas.height = 256;
+      const sCtx = signCanvas.getContext('2d');
+      sCtx.fillStyle = 'rgba(0,0,0,0)';
+      sCtx.fillRect(0, 0, 1024, 256);
+      sCtx.font = 'italic 64px Georgia';
+      sCtx.fillStyle = '#ffd27a';
+      sCtx.textAlign = 'center';
+      sCtx.fillText('Qomarii & Ramazon', 512, 115);
+      sCtx.font = '32px Georgia';
+      sCtx.fillStyle = '#ffb3c6';
+      sCtx.fillText('Abadiy xotiralar zali', 512, 175);
+
+      const signTex = new THREE.CanvasTexture(signCanvas);
+      const signMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(5.5, 1.4),
+        new THREE.MeshBasicMaterial({ map: signTex, transparent: true })
+      );
+      signMesh.position.set(0, 2.5, zEnd + 0.05);
+      mScene.add(signMesh);
+
+      // Oltin ramka materiali
+      const frameMat = new THREE.MeshStandardMaterial({
+        color: 0xd4af37,
+        roughness: 0.25,
+        metalness: 0.85
+      });
+
+      const texLoader = new THREE.TextureLoader();
+      texLoader.setCrossOrigin('anonymous');
+
+      // Rasmlarni devorlarga joylashtirish
+      GALLERY_ITEMS.forEach((item, idx) => {
+        const isLeft = idx % 2 === 0;
+        const row = Math.floor(idx / 2);
+        const zPos = 3.5 - row * spacing;
+        const xPos = isLeft ? -hallWidth / 2 + 0.08 : hallWidth / 2 - 0.08;
+        const rotY = isLeft ? Math.PI / 2 : -Math.PI / 2;
+
+        const group = new THREE.Group();
+        group.position.set(xPos, 2.0, zPos);
+        group.rotation.y = rotY;
+
+        // Oltin tashqi ramka
+        const frameW = 2.6, frameH = 1.9, depth = 0.12;
+        const outerFrame = new THREE.Mesh(new THREE.BoxGeometry(frameW, frameH, depth), frameMat);
+        outerFrame.castShadow = true;
+        group.add(outerFrame);
+
+        // Oq paspartu (ramka ichidagi hoshiya)
+        const matBoard = new THREE.Mesh(
+          new THREE.PlaneGeometry(frameW - 0.24, frameH - 0.24),
+          new THREE.MeshStandardMaterial({ color: 0xf5efe6, roughness: 0.8 })
+        );
+        matBoard.position.z = depth / 2 + 0.005;
+        group.add(matBoard);
+
+        // Asosiy rasm polotnosi
+        const artMat = new THREE.MeshStandardMaterial({
+          color: 0xffffff,
+          roughness: 0.35
+        });
+        texLoader.load(item.img, (texture) => {
+          artMat.map = texture;
+          artMat.needsUpdate = true;
+        });
+
+        const artMesh = new THREE.Mesh(new THREE.PlaneGeometry(frameW - 0.42, frameH - 0.42), artMat);
+        artMesh.position.z = depth / 2 + 0.012;
+        group.add(artMesh);
+
+        // Rasm ustidagi muzey chirog'i (Bra)
+        const lampBar = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.9), frameMat);
+        lampBar.rotation.z = Math.PI / 2;
+        lampBar.position.set(0, frameH / 2 + 0.25, 0.25);
+        group.add(lampBar);
+
+        mScene.add(group);
+
+        // Rasmni yorituvchi haqiqiy SpotLight
+        const spot = new THREE.SpotLight(0xffe4b5, 2.2, 8, Math.PI / 4, 0.5, 1);
+        spot.position.set(isLeft ? xPos + 1.4 : xPos - 1.4, 3.6, zPos);
+        spot.target = group;
+        mScene.add(spot);
+
+        // Yaqinlashganda aniqlash uchun saqlab qo'yamiz
+        artworks.push({
+          pos: new THREE.Vector3(xPos, 1.7, zPos),
+          title: item.title,
+          desc: item.desc
+        });
+      });
+
+      // Harakat chegaralarini saqlash
+      mScene.userData.bounds = {
+        minX: -hallWidth / 2 + 1.1,
+        maxX: hallWidth / 2 - 1.1,
+        minZ: zEnd + 1.5,
+        maxZ: zStart - 1.2
+      };
+    }
+
+    /* ---- Muzey ichida yurish va qarash boshqaruvi ---- */
+    const keys = { w: false, a: false, s: false, d: false };
+    let yaw = 0, pitch = 0;
+    let isDragging = false, prevX = 0, prevY = 0;
+    const joy = { x: 0, y: 0, active: false };
+
+    window.addEventListener('keydown', (e) => {
+      const k = e.key.toLowerCase();
+      if (k === 'w' || e.key === 'ArrowUp') keys.w = true;
+      if (k === 's' || e.key === 'ArrowDown') keys.s = true;
+      if (k === 'a' || e.key === 'ArrowLeft') keys.a = true;
+      if (k === 'd' || e.key === 'ArrowRight') keys.d = true;
+    });
+    window.addEventListener('keyup', (e) => {
+      const k = e.key.toLowerCase();
+      if (k === 'w' || e.key === 'ArrowUp') keys.w = false;
+      if (k === 's' || e.key === 'ArrowDown') keys.s = false;
+      if (k === 'a' || e.key === 'ArrowLeft') keys.a = false;
+      if (k === 'd' || e.key === 'ArrowRight') keys.d = false;
+    });
+
+    // Sichqoncha bilan atrofga qarash
+    museumCanvas.addEventListener('pointerdown', (e) => {
+      isDragging = true;
+      prevX = e.clientX;
+      prevY = e.clientY;
+    });
+    window.addEventListener('pointermove', (e) => {
+      if (!isDragging || !isMuseumOpen) return;
+      const dx = e.clientX - prevX;
+      const dy = e.clientY - prevY;
+      prevX = e.clientX;
+      prevY = e.clientY;
+      yaw -= dx * 0.004;
+      pitch = Math.max(-0.5, Math.min(0.5, pitch - dy * 0.004));
+    });
+    window.addEventListener('pointerup', () => { isDragging = false; });
+
+    // Telefon uchun virtual joystik
+    const joyZone = document.getElementById('joyZone');
+    const joyKnob = document.getElementById('joyKnob');
+
+    joyZone.addEventListener('touchstart', (e) => {
+      e.stopPropagation();
+      joy.active = true;
+    }, { passive: false });
+
+    joyZone.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!joy.active) return;
+      const rect = joyZone.getBoundingClientRect();
+      const touch = e.touches[0];
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      let dx = touch.clientX - cx;
+      let dy = touch.clientY - cy;
+      const maxR = 35;
+      const dist = Math.hypot(dx, dy);
+      if (dist > maxR) {
+        dx = (dx / dist) * maxR;
+        dy = (dy / dist) * maxR;
+      }
+      joyKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+      joy.x = dx / maxR;
+      joy.y = dy / maxR;
+    }, { passive: false });
+
+    const resetJoy = () => {
+      joy.active = false;
+      joy.x = 0; joy.y = 0;
+      joyKnob.style.transform = 'translate(0px, 0px)';
+    };
+    joyZone.addEventListener('touchend', resetJoy);
+    joyZone.addEventListener('touchcancel', resetJoy);
+
+    // Muzey animatsiya sikli
+    let mLastTime = performance.now();
+    let walkBob = 0;
+
+    function animateMuseum() {
+      requestAnimationFrame(animateMuseum);
+      if (!isMuseumOpen || !mInitialized) return;
+
+      const now = performance.now();
+      const dt = Math.min((now - mLastTime) / 1000, 0.05);
+      mLastTime = now;
+
+      // Kamerani burish
+      const euler = new THREE.Euler(pitch, yaw, 0, 'YXZ');
+      mCamera.quaternion.setFromEuler(euler);
+
+      // Oldinga/orqaga va yon tomonga yurish yo'nalishlari
+      const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+      const right = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+
+      let moveF = (keys.w ? 1 : 0) - (keys.s ? 1 : 0) - joy.y;
+      let moveR = (keys.d ? 1 : 0) - (keys.a ? 1 : 0) + joy.x;
+
+      const speed = 3.8 * dt;
+      const isMoving = Math.hypot(moveF, moveR) > 0.05;
+
+      if (isMoving) {
+        mCamera.position.addScaledVector(forward, moveF * speed);
+        mCamera.position.addScaledVector(right, moveR * speed);
+        // Yurayotganda yengil qadam tebranishi (realizm uchun)
+        walkBob += dt * 9;
+        mCamera.position.y = 1.7 + Math.sin(walkBob) * 0.035;
+      } else {
+        mCamera.position.y += (1.7 - mCamera.position.y) * 0.1;
+      }
+
+      // Devorlardan o'tib ketmaslik chegarasi
+      const b = mScene.userData.bounds;
+      mCamera.position.x = Math.max(b.minX, Math.min(b.maxX, mCamera.position.x));
+      mCamera.position.z = Math.max(b.minZ, Math.min(b.maxZ, mCamera.position.z));
+
+      // Eng yaqin rasmni tekshirish va izohni chiqarish
+      let closest = null;
+      let minDist = 3.6; // 3.6 metr yaqinlashganda izoh chiqadi
+      for (const art of artworks) {
+        const d = mCamera.position.distanceTo(art.pos);
+        if (d < minDist) {
+          minDist = d;
+          closest = art;
+        }
+      }
+
+      if (closest) {
+        artTitle.textContent = closest.title;
+        artDesc.textContent = closest.desc;
+        artCaption.classList.add('visible');
+      } else {
+        artCaption.classList.remove('visible');
+      }
+
+      mRenderer.render(mScene, mCamera);
+    }
+    animateMuseum();
+
+    // Muzeyni ochish va yopish tugmalari
+    document.getElementById('openMuseum').addEventListener('click', () => {
+      initMuseum();
+      isMuseumOpen = true;
+      document.body.classList.add('museum-active');
+      museumScreen.classList.remove('hidden');
+      mRenderer.setSize(innerWidth, innerHeight);
+      mCamera.aspect = innerWidth / innerHeight;
+      mCamera.updateProjectionMatrix();
+    });
+
+    document.getElementById('closeMuseum').addEventListener('click', () => {
+      isMuseumOpen = false;
+      document.body.classList.remove('museum-active');
+      museumScreen.classList.add('hidden');
+    });
+
+    window.addEventListener('resize', () => {
+      if (mInitialized && isMuseumOpen) {
+        mCamera.aspect = innerWidth / innerHeight;
+        mCamera.updateProjectionMatrix();
+        mRenderer.setSize(innerWidth, innerHeight);
+      }
+    });
+  </script>
+</body>
+</html>
